@@ -70,18 +70,15 @@ def warden_login(request):
                 request,
                 username=cd['username'],
                 password=cd['password'])
-            if user is not None:
-                if not user.is_warden:
-                    return HttpResponse('Invalid Login')
-                elif user.is_active:
-                    login(request, user)
-                    room_list = request.user.warden.hostel.room_set.all()
-                    context = {'rooms': room_list}
-                    return render(request, 'warden.html', context)
-                else:
-                    return HttpResponse('Disabled account')
-            else:
+            if not user.is_warden or user is None:
                 return HttpResponse('Invalid Login')
+            elif user.is_active:
+                login(request, user)
+                room_list = request.user.warden.hostel.room_set.all()
+                context = {'rooms': room_list}
+                return render(request, 'warden.html', context)
+            else:
+                return HttpResponse('Disabled account')
     else:
         form = LoginForm()
         return render(request, 'login.html', {'form': form})
@@ -105,9 +102,9 @@ def select(request):
     if request.user.student.room:
         room_id_old = request.user.student.room_id
 
+    if not request.user.student.no_dues:
+        return HttpResponse('You have dues. Please contact your Hostel Caretaker or Warden')
     if request.method == 'POST':
-        if not request.user.student.no_dues:
-            return HttpResponse('You have dues. Please contact your Hostel Caretaker or Warden')
         form = SelectionForm(request.POST, instance=request.user.student)
         if form.is_valid():
             if request.user.student.room_id:
@@ -116,26 +113,18 @@ def select(request):
                 room = Room.objects.get(id=r_id_after)
                 room.vacant = False
                 room.save()
-                try:
-                    room = Room.objects.get(id=room_id_old)
-                    room.vacant = True
-                    room.save()
-                except BaseException:
-                    pass
             else:
                 request.user.student.room_allotted = False
-                try:
-                    room = Room.objects.get(id=room_id_old)
-                    room.vacant = True
-                    room.save()
-                except BaseException:
-                    pass
+            try:
+                room = Room.objects.get(id=room_id_old)
+                room.vacant = True
+                room.save()
+            except BaseException:
+                pass
             form.save()
             student = request.user.student
             return render(request, 'profile.html', {'student': student})
     else:
-        if not request.user.student.no_dues:
-            return HttpResponse('You have dues. Please contact your Hostel Caretaker or Warden')
         form = SelectionForm(instance=request.user.student)
         student_gender = request.user.student.gender
         student_course = request.user.student.course
@@ -143,18 +132,15 @@ def select(request):
         hostel = Hostel.objects.filter(
             gender=student_gender, course=student_course)
         x = Room.objects.none()
-        if student_room_type == 'B':
-            for i in range(len(hostel)):
-                h_id = hostel[i].id
+        for item in hostel:
+            h_id = item.id
+            if student_room_type == 'B':
                 a = Room.objects.filter(
                     hostel_id=h_id, room_type=['S', 'D'], vacant=True)
-                x = x | a
-        else :
-            for i in range(len(hostel)):
-                h_id = hostel[i].id
+            else:
                 a = Room.objects.filter(
                     hostel_id=h_id, room_type=student_room_type, vacant=True)
-                x = x | a
+            x = x | a
         form.fields["room"].queryset = x
         return render(request, 'select_room.html', {'form': form})
 
@@ -162,14 +148,11 @@ def select(request):
 @login_required
 def warden_dues(request):
     user = request.user
-    if user is not None:
-        if not user.is_warden:
-            return HttpResponse('Invalid Login')
-        else:
-            students = Student.objects.all()
-            return render(request, 'dues.html', {'students': students})
-    else:
+    if not user.is_warden or user is None:
         return HttpResponse('Invalid Login')
+    else:
+        students = Student.objects.all()
+        return render(request, 'dues.html', {'students': students})
 
 
 @login_required
